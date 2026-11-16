@@ -1,0 +1,65 @@
+name: Telegram Connection Test
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  telegram-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Send Telegram message
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        shell: python
+        run: |
+          import os
+          import json
+          import urllib.parse
+          import urllib.request
+          import urllib.error
+
+          token = os.environ.get("BOT_TOKEN", "").strip()
+          chat_id = os.environ.get("CHAT_ID", "").strip()
+
+          if not token:
+              raise SystemExit("MISSING: TELEGRAM_BOT_TOKEN secret")
+
+          if not chat_id:
+              raise SystemExit("MISSING: TELEGRAM_CHAT_ID secret")
+
+          url = "https://api.telegram.org/bot" + token + "/sendMessage"
+
+          data = urllib.parse.urlencode({
+              "chat_id": chat_id,
+              "text": "Connection successful. GitHub can message me."
+          }).encode()
+
+          request = urllib.request.Request(url, data=data)
+
+          try:
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  result = json.load(response)
+          except urllib.error.HTTPError as error:
+              try:
+                  details = json.loads(error.read().decode())
+                  message = details.get("description", "Telegram rejected the request")
+              except Exception:
+                  message = "Telegram rejected the request"
+              raise SystemExit("TELEGRAM ERROR: " + message)
+          except urllib.error.URLError:
+              raise SystemExit("NETWORK ERROR: Could not connect to Telegram")
+
+          if not result.get("ok"):
+              raise SystemExit("TELEGRAM ERROR: Message was not accepted")
+
+          print("SUCCESS: Telegram message delivered")
